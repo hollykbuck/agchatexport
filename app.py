@@ -8,7 +8,8 @@ import aiosqlite
 import agent_steps_pb2
 
 # Configuration
-DB_DIR = 'datasource/conversations'
+DB_DIR = '/conversations'
+BRAIN_DIR = '/brain'
 
 def calculate_stats(step, raw_payload):
     total_len = len(raw_payload)
@@ -61,13 +62,26 @@ async def get_messages(db_path):
                     messages.append(msg)
     return messages
 
+def get_artifacts(db_uuid):
+    brain_path = os.path.join(BRAIN_DIR, db_uuid)
+    artifacts = []
+    if os.path.exists(brain_path):
+        for root, dirs, files in os.walk(brain_path):
+            for file in files:
+                full_path = os.path.join(root, file)
+                rel_path = os.path.relpath(full_path, brain_path)
+                artifacts.append(rel_path)
+    return artifacts
+
 async def index(request):
     db_files = glob.glob(os.path.join(DB_DIR, '*.db'))
     db_names = [os.path.basename(f) for f in db_files]
     
     html = "<html><head><title>Conversations</title><style>"
-    html += "body { font-family: sans-serif; margin: 2em; }"
-    html += "li { margin: 0.5em 0; }"
+    html += "body { font-family: sans-serif; margin: 2em; background: #fafafa; }"
+    html += "li { margin: 0.5em 0; padding: 0.5em; background: white; border-radius: 4px; border: 1px solid #ddd; }"
+    html += "a { text-decoration: none; color: #2196f3; font-weight: bold; }"
+    html += "h1 { color: #333; }"
     html += "</style></head><body>"
     html += "<h1>Conversations</h1><ul>"
     for name in db_names:
@@ -77,29 +91,46 @@ async def index(request):
 
 async def chat_detail(request):
     db_name = request.match_info['db_name']
+    db_uuid = db_name.replace('.db', '')
     db_path = os.path.join(DB_DIR, db_name)
     
     if not os.path.exists(db_path):
         return web.Response(text="Database not found", status=404)
         
     messages = await get_messages(db_path)
+    artifacts = get_artifacts(db_uuid)
     
     html = f"<html><head><title>{db_name}</title><style>"
-    html += "body { font-family: sans-serif; max-width: 800px; margin: 2em auto; background: #f4f4f9; }"
-    html += ".message { margin-bottom: 1.5em; padding: 1em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }"
-    html += ".USER { background: #e3f2fd; border-left: 5px solid #2196f3; }"
-    html += ".ASSISTANT { background: #f1f8e9; border-left: 5px solid #8bc34a; }"
-    html += ".OBSERVATION { background: #fff3e0; border-left: 5px solid #ff9800; font-family: monospace; font-size: 0.9em; }"
-    html += "pre { background: #eee; padding: 0.5em; overflow-x: auto; }"
-    html += "h3 { margin-top: 0; }"
-    html += ".role { font-weight: bold; margin-bottom: 0.5em; display: block; }"
+    html += "body { font-family: sans-serif; max-width: 1200px; margin: 0 auto; background: #f4f4f9; display: flex; }"
+    html += ".sidebar { width: 300px; padding: 2em; background: #fff; border-right: 1px solid #ddd; height: 100vh; overflow-y: auto; position: sticky; top: 0; }"
+    html += ".content { flex: 1; padding: 2em; overflow-y: auto; }"
+    html += ".message { margin-bottom: 1.5em; padding: 1em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); background: white; }"
+    html += ".USER { border-left: 5px solid #2196f3; }"
+    html += ".ASSISTANT { border-left: 5px solid #8bc34a; }"
+    html += ".OBSERVATION { border-left: 5px solid #ff9800; font-family: monospace; font-size: 0.9em; }"
+    html += "pre { background: #f8f8f8; padding: 0.8em; overflow-x: auto; border: 1px solid #eee; border-radius: 4px; }"
+    html += ".role { font-weight: bold; margin-bottom: 0.5em; display: block; color: #666; font-size: 0.8em; text-transform: uppercase; }"
+    html += "h1 { margin-top: 0; font-size: 1.5em; }"
+    html += ".artifact-link { display: block; margin: 0.3em 0; font-size: 0.9em; color: #555; text-decoration: none; }"
+    html += ".artifact-link:hover { color: #2196f3; }"
     html += "</style></head><body>"
-    html += f'<h1>Chat: {db_name}</h1><p><a href="/">Back to list</a></p>'
     
+    # Sidebar
+    html += '<div class="sidebar">'
+    html += f'<h1>Chat History</h1><p><a href="/">← Back to list</a></p>'
+    html += '<h3>Artifacts (Brain)</h3>'
+    if not artifacts:
+        html += '<p style="color: #999; font-style: italic;">No artifacts found</p>'
+    for art in artifacts:
+        html += f'<a class="artifact-link" href="/brain/{db_uuid}/{art}" target="_blank">{art}</a>'
+    html += '</div>'
+    
+    # Main Content
+    html += '<div class="content">'
+    html += f'<h2>Database: {db_name}</h2>'
     for msg in messages:
         role = msg['role']
         content = msg['content'].replace('\n', '<br>')
-        # Handle code blocks for better rendering in HTML
         if '```' in content:
             import re
             content = re.sub(r'```(\w+)?<br>(.*?)```', r'<pre><code>\2</code></pre>', content, flags=re.DOTALL)
@@ -108,14 +139,31 @@ async def chat_detail(request):
         html += f'<span class="role">{role} (Step {msg["idx"]})</span>'
         html += f'<div>{content}</div>'
         html += '</div>'
+    html += '</div>'
         
     html += "</body></html>"
     return web.Response(text=html, content_type='text/html')
+
+async def view_artifact(request):
+    db_uuid = request.match_info['db_uuid']
+    artifact_path = request.match_info['path']
+    full_path = os.path.join(BRAIN_DIR, db_uuid, artifact_path)
+    
+    if not os.path.exists(full_path) or not os.path.isfile(full_path):
+        return web.Response(text="Artifact not found", status=404)
+        
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return web.Response(text=content, content_type='text/plain')
+    except Exception as e:
+        return web.Response(text=f"Error reading artifact: {str(e)}", status=500)
 
 app = web.Application()
 app.add_routes([
     web.get('/', index),
     web.get('/chat/{db_name}', chat_detail),
+    web.get('/brain/{db_uuid}/{path:.*}', view_artifact),
 ])
 
 if __name__ == '__main__':
