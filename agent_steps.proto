@@ -59,11 +59,16 @@ message AssistantMessage {
     int32 unknown_12 = 12;
 }
 
+message ToolOutput {
+    string key = 1;
+    string content = 3;
+}
+
 message Step {
     int32 step_type = 1;
     int32 status = 4;
     StepMetadata metadata = 5;
-    // Field 13 tool result
     UserMessage user_message = 19;
     AssistantMessage assistant_message = 20;
+    ToolOutput tool_output = 133;
 }
