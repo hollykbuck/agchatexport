@@ -3,13 +3,10 @@ import glob
 import json
 import asyncio
 import aiohttp
+import argparse
 from aiohttp import web
 import aiosqlite
 import agent_steps_pb2
-
-# Configuration
-DB_DIR = '/conversations'
-BRAIN_DIR = '/brain'
 
 def calculate_stats(step, raw_payload):
     total_len = len(raw_payload)
@@ -62,8 +59,8 @@ async def get_messages(db_path):
                     messages.append(msg)
     return messages
 
-def get_artifacts(db_uuid):
-    brain_path = os.path.join(BRAIN_DIR, db_uuid)
+def get_artifacts(brain_dir, db_uuid):
+    brain_path = os.path.join(brain_dir, db_uuid)
     artifacts = []
     if os.path.exists(brain_path):
         for root, dirs, files in os.walk(brain_path):
@@ -74,7 +71,8 @@ def get_artifacts(db_uuid):
     return artifacts
 
 async def index(request):
-    db_files = glob.glob(os.path.join(DB_DIR, '*.db'))
+    db_dir = request.app['DB_DIR']
+    db_files = glob.glob(os.path.join(db_dir, '*.db'))
     db_names = [os.path.basename(f) for f in db_files]
     
     html = "<html><head><title>Conversations</title><style>"
@@ -90,15 +88,17 @@ async def index(request):
     return web.Response(text=html, content_type='text/html')
 
 async def chat_detail(request):
+    db_dir = request.app['DB_DIR']
+    brain_dir = request.app['BRAIN_DIR']
     db_name = request.match_info['db_name']
     db_uuid = db_name.replace('.db', '')
-    db_path = os.path.join(DB_DIR, db_name)
+    db_path = os.path.join(db_dir, db_name)
     
     if not os.path.exists(db_path):
         return web.Response(text="Database not found", status=404)
         
     messages = await get_messages(db_path)
-    artifacts = get_artifacts(db_uuid)
+    artifacts = get_artifacts(brain_dir, db_uuid)
     
     html = f"<html><head><title>{db_name}</title><style>"
     html += "body { font-family: sans-serif; max-width: 1200px; margin: 0 auto; background: #f4f4f9; display: flex; }"
@@ -145,9 +145,10 @@ async def chat_detail(request):
     return web.Response(text=html, content_type='text/html')
 
 async def view_artifact(request):
+    brain_dir = request.app['BRAIN_DIR']
     db_uuid = request.match_info['db_uuid']
     artifact_path = request.match_info['path']
-    full_path = os.path.join(BRAIN_DIR, db_uuid, artifact_path)
+    full_path = os.path.join(brain_dir, db_uuid, artifact_path)
     
     if not os.path.exists(full_path) or not os.path.isfile(full_path):
         return web.Response(text="Artifact not found", status=404)
@@ -159,13 +160,26 @@ async def view_artifact(request):
     except Exception as e:
         return web.Response(text=f"Error reading artifact: {str(e)}", status=500)
 
-app = web.Application()
-app.add_routes([
-    web.get('/', index),
-    web.get('/chat/{db_name}', chat_detail),
-    web.get('/brain/{db_uuid}/{path:.*}', view_artifact),
-])
+def main():
+    parser = argparse.ArgumentParser(description='Conversations Viewer')
+    parser.add_argument('--db-dir', default='~/.gemini/antigravity/conversations', help='Directory for conversation databases')
+    parser.add_argument('--brain-dir', default='~/.gemini/antigravity/brain', help='Directory for brain artifacts')
+    parser.add_argument('--host', default='localhost', help='Host to bind')
+    parser.add_argument('--port', type=int, default=7396, help='Port to bind')
+    args = parser.parse_args()
+
+    app = web.Application()
+    app['DB_DIR'] = args.db_dir
+    app['BRAIN_DIR'] = args.brain_dir
+    
+    app.add_routes([
+        web.get('/', index),
+        web.get('/chat/{db_name}', chat_detail),
+        web.get('/brain/{db_uuid}/{path:.*}', view_artifact),
+    ])
+
+    print(f"Starting server at http://{args.host}:{args.port}")
+    web.run_app(app, host=args.host, port=args.port)
 
 if __name__ == '__main__':
-    print("Starting server at http://localhost:8080")
-    web.run_app(app, port=8080)
+    main()
