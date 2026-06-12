@@ -2,10 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +19,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite"
 )
+
+//go:embed all:frontend/out
+var embeddedFrontend embed.FS
 
 type Config struct {
 	DBDir    string
@@ -42,44 +47,43 @@ func main() {
 	mux.HandleFunc("GET /api/brain/{db_uuid}/{path...}", apiViewArtifact)
 
 	// Serve static files
-	staticDir := filepath.Join(".", "frontend", "out")
-	if _, err := os.Stat(staticDir); err == nil {
-		fileServer := http.FileServer(http.Dir(staticDir))
-
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// Only handle GET for static files
-			if r.Method != http.MethodGet {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-
-			path := r.URL.Path
-			if path == "/" {
-				http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
-				return
-			}
-			if path == "/chat" {
-				http.ServeFile(w, r, filepath.Join(staticDir, "chat.html"))
-				return
-			}
-
-			// Try to serve the file directly from staticDir
-			fullPath := filepath.Join(staticDir, path)
-			if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
-				fileServer.ServeHTTP(w, r)
-				return
-			}
-
-			// If not found and it's not a file-like path (no extension), serve index.html
-			if !strings.Contains(filepath.Base(path), ".") {
-				http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
-				return
-			}
-
-			// Otherwise, let FileServer return 404
-			fileServer.ServeHTTP(w, r)
-		})
+	frontendFS, err := fs.Sub(embeddedFrontend, "frontend/out")
+	if err != nil {
+		log.Fatal(err)
 	}
+	fileServer := http.FileServer(http.FS(frontendFS))
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Only handle GET for static files
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			path = "index.html"
+		} else if path == "chat" {
+			path = "chat.html"
+		}
+
+		// Try to serve the file from embedded FS
+		_, err := fs.Stat(frontendFS, path)
+		if err == nil {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		// If not found and it's not a file-like path (no extension), serve index.html
+		if !strings.Contains(filepath.Base(path), ".") {
+			r.URL.Path = "/index.html"
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		// Otherwise, let FileServer return 404
+		fileServer.ServeHTTP(w, r)
+	})
 
 	handler := cors.AllowAll().Handler(mux)
 
