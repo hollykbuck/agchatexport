@@ -44,11 +44,15 @@ func main() {
 	// Serve static files
 	staticDir := filepath.Join(".", "frontend", "out")
 	if _, err := os.Stat(staticDir); err == nil {
-		// Serve _next directory
-		mux.Handle("/_next/", http.StripPrefix("/_next/", http.FileServer(http.Dir(filepath.Join(staticDir, "_next")))))
+		fileServer := http.FileServer(http.Dir(staticDir))
 
-		// Main handler for other static files and routes
-		mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// Only handle GET for static files
+			if r.Method != http.MethodGet {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
 			path := r.URL.Path
 			if path == "/" {
 				http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
@@ -59,15 +63,21 @@ func main() {
 				return
 			}
 
-			// Try to serve the file directly
+			// Try to serve the file directly from staticDir
 			fullPath := filepath.Join(staticDir, path)
 			if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
-				http.ServeFile(w, r, fullPath)
+				fileServer.ServeHTTP(w, r)
 				return
 			}
 
-			// If not found, serve index.html (SPA fallback)
-			http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
+			// If not found and it's not a file-like path (no extension), serve index.html
+			if !strings.Contains(filepath.Base(path), ".") {
+				http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
+				return
+			}
+
+			// Otherwise, let FileServer return 404
+			fileServer.ServeHTTP(w, r)
 		})
 	}
 
@@ -168,10 +178,12 @@ func getMessages(dbPath string) ([]map[string]interface{}, error) {
 				td := step.AssistantMessage.ToolDirective
 				toolCall := map[string]interface{}{
 					"tool_name": td.ToolName,
-					"args":      make(map[string]interface{}),
 				}
-				if err := json.Unmarshal([]byte(td.ArgsJson), &toolCall["args"]); err != nil {
+				var args interface{}
+				if err := json.Unmarshal([]byte(td.ArgsJson), &args); err != nil {
 					toolCall["args_raw"] = td.ArgsJson
+				} else {
+					toolCall["args"] = args
 				}
 				msg["tool_call"] = toolCall
 			}
