@@ -13,7 +13,10 @@ import {
   User, 
   Bot, 
   Terminal,
-  ExternalLink 
+  ExternalLink,
+  Download,
+  FileJson,
+  FileCode
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -36,6 +39,40 @@ function ChatContent() {
         .finally(() => setLoading(false));
     }
   }, [name]);
+
+  const downloadFile = (content: string, filename: string, contentType: string) => {
+    const blob = new Blob([content], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportAsJSONL = () => {
+    if (!data) return;
+    const jsonl = data.messages
+      .map(msg => JSON.stringify({ role: msg.role, content: msg.content, step: msg.idx }))
+      .join("\n");
+    downloadFile(jsonl, `${data.db_name}.jsonl`, "application/x-jsonlines");
+  };
+
+  const exportAsMarkdown = () => {
+    if (!data) return;
+    let md = `# Chat Export: ${data.db_name}\n\n`;
+    data.messages.forEach(msg => {
+      md += `### ${msg.role} (Step ${msg.idx})\n\n${msg.content}\n\n`;
+      if (msg.tool_call) {
+        md += `**Action**: \`${msg.tool_call.tool_name}\`\n`;
+        md += `\`\`\`json\n${JSON.stringify(msg.tool_call.args || msg.tool_call.args_raw, null, 2)}\n\`\`\`\n\n`;
+      }
+      md += `---\n\n`;
+    });
+    downloadFile(md, `${data.db_name}.md`, "text/markdown");
+  };
 
   if (!name) return <div>No database specified</div>;
 
@@ -67,6 +104,29 @@ function ChatContent() {
         </div>
         
         <div className="flex-1 overflow-y-auto p-6">
+          <div className="mb-8">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center">
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={exportAsJSONL}
+                className="flex items-center justify-center gap-2 p-2 text-xs font-medium bg-gray-50 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg border border-gray-200 transition-colors"
+              >
+                <FileJson className="w-3.5 h-3.5" />
+                JSONL
+              </button>
+              <button 
+                onClick={exportAsMarkdown}
+                className="flex items-center justify-center gap-2 p-2 text-xs font-medium bg-gray-50 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg border border-gray-200 transition-colors"
+              >
+                <FileCode className="w-3.5 h-3.5" />
+                Markdown
+              </button>
+            </div>
+          </div>
+
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center">
             <FileText className="w-4 h-4 mr-2" />
             Artifacts (Brain)
