@@ -145,7 +145,23 @@ def main():
     artifact_resource = cors.add(app.router.add_resource("/api/brain/{db_uuid}/{path:.*}"))
     cors.add(artifact_resource.add_route("GET", api_view_artifact))
 
-    print(f"API Server starting at http://{args.host}:{args.port}")
+    # Serve static frontend files
+    static_dir = os.path.join(os.path.dirname(__file__), "frontend", "out")
+    if os.path.exists(static_dir):
+        # Serve the single-page application
+        app.router.add_static('/_next', os.path.join(static_dir, '_next'))
+        
+        async def serve_index(request):
+            return web.FileResponse(os.path.join(static_dir, 'index.html'))
+            
+        async def serve_chat(request):
+            return web.FileResponse(os.path.join(static_dir, 'chat.html'))
+
+        app.router.add_get('/', serve_index)
+        app.router.add_get('/chat', serve_chat)
+        app.router.add_static('/', static_dir) # For other assets like favicon.ico
+
+    print(f"Server starting at http://{args.host}:{args.port}")
     web.run_app(app, host=args.host, port=args.port)
 
 if __name__ == '__main__':

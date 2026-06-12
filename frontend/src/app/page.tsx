@@ -39,7 +39,7 @@ export default function Home() {
           chats.map((name) => (
             <Link
               key={name}
-              href={`/chat/${name}`}
+              href={`/chat?name=${name}`}
               className="group flex items-center p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all"
             >
               <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">

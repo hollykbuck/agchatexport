@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { getChatDetail, getArtifactUrl } from "@/lib/api";
 import { ChatDetail, Message } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
@@ -22,19 +22,22 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export default function ChatPage() {
-  const { name } = useParams();
+function ChatContent() {
+  const searchParams = useSearchParams();
+  const name = searchParams.get("name");
   const router = useRouter();
   const [data, setData] = useState<ChatDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (name) {
-      getChatDetail(name as string)
+      getChatDetail(name)
         .then(setData)
         .finally(() => setLoading(false));
     }
   }, [name]);
+
+  if (!name) return <div>No database specified</div>;
 
   if (loading) {
     return (
@@ -100,6 +103,14 @@ export default function ChatPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ChatContent />
+    </Suspense>
   );
 }
 
