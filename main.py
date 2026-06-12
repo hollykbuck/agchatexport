@@ -1,12 +1,10 @@
 import os
 import glob
 import json
-import asyncio
-import aiohttp
 import argparse
 from aiohttp import web
 import aiosqlite
-import agent_steps_pb2
+from agchatexport import agent_steps_pb2
 
 def calculate_stats(step, raw_payload):
     total_len = len(raw_payload)
@@ -96,6 +94,7 @@ async def chat_detail(request):
     
     if not os.path.exists(db_path):
         return web.Response(text="Database not found", status=404)
+    
         
     messages = await get_messages(db_path)
     artifacts = get_artifacts(brain_dir, db_uuid)
@@ -161,9 +160,10 @@ async def view_artifact(request):
         return web.Response(text=f"Error reading artifact: {str(e)}", status=500)
 
 def main():
+    
     parser = argparse.ArgumentParser(description='Conversations Viewer')
-    parser.add_argument('--db-dir', default='~/.gemini/antigravity/conversations', help='Directory for conversation databases')
-    parser.add_argument('--brain-dir', default='~/.gemini/antigravity/brain', help='Directory for brain artifacts')
+    parser.add_argument('--db-dir', default=os.path.expanduser("~/.gemini/antigravity-cli/conversations"), help='Directory for conversation databases')
+    parser.add_argument('--brain-dir', default=os.path.expanduser('~/.gemini/antigravity-cli/brain'), help='Directory for brain artifacts')
     parser.add_argument('--host', default='localhost', help='Host to bind')
     parser.add_argument('--port', type=int, default=7396, help='Port to bind')
     args = parser.parse_args()
