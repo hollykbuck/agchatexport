@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"github.com/hollykbuck/agchatexport/pb"
@@ -30,15 +31,37 @@ type Config struct {
 	Port     int
 }
 
-var config Config
+var (
+	config  Config
+	version = "devel"
+)
 
 func main() {
+	showVersion := flag.Bool("version", false, "Show version information")
 	home, _ := os.UserHomeDir()
 	flag.StringVar(&config.DBDir, "db-dir", filepath.Join(home, ".gemini/antigravity-cli/conversations"), "Directory for conversation databases")
 	flag.StringVar(&config.BrainDir, "brain-dir", filepath.Join(home, ".gemini/antigravity-cli/brain"), "Directory for brain artifacts")
 	flag.StringVar(&config.Host, "host", "localhost", "Host to bind")
 	flag.IntVar(&config.Port, "port", 7396, "Port to bind")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("agchatexport version: %s\n", version)
+		if info, ok := debug.ReadBuildInfo(); ok {
+			for _, setting := range info.Settings {
+				if setting.Key == "vcs.revision" {
+					fmt.Printf("Revision: %s\n", setting.Value)
+				}
+				if setting.Key == "vcs.time" {
+					fmt.Printf("VCS Time: %s\n", setting.Value)
+				}
+				if setting.Key == "vcs.modified" {
+					fmt.Printf("VCS Modified: %s\n", setting.Value)
+				}
+			}
+		}
+		return
+	}
 
 	mux := http.NewServeMux()
 
