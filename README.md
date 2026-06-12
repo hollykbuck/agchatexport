@@ -1,94 +1,73 @@
-# Antigravity CLI Chat Viewer
+# Antigravity Chat Export Viewer
 
-A viewer for Antigravity chat logs. 
+A modern, Go-based tool for viewing and exporting Antigravity chat logs. This project has been migrated from Python to Go to provide a single-file, zero-dependency experience.
 
-##  Features
+## Features
 
-- Markdown Support: Full rendering of Markdown, including tables, lists, and formatted text.
-- Code Highlighting: Beautifully formatted code blocks for developer-centric logs.
-- Artifact Integration: Seamlessly browse and view "Brain" artifacts associated with your chats.
-- Tool Call Visibility: Clear visualization of agent "Planning Actions" and tool executions.
-- Unified Distribution: Serves the modern frontend directly from the Python process.
+- Single Binary Distribution: Frontend Next.js assets are embedded into the binary using `go:embed`.
+- High-Performance Parsing: Native Go implementation for handling Protobuf-serialized chat steps.
+- Modern UI: Built-in responsive Web interface powered by Next.js and Tailwind CSS.
+- Cross-Platform Support: Binaries available for Linux, Windows, and macOS (amd64/arm64).
+- Build Traceability: Support for `-version` flag to view Commit Hash and Build Time.
 
-## Tech Stack
+## Quick Start
 
-- Backend: Python 3.12+, aiohttp, aiosqlite, Protobuf
-- Frontend: Next.js 15, TypeScript, Tailwind CSS 4, Lucide Icons, React Markdown
+### Download
 
-## Getting Started
+Please visit the [Releases](https://github.com/hollykbuck/agchatexport/releases) page to download the binary for your operating system.
+
+### Running
+
+```bash
+# Basic run (default port 7396)
+./agchatexport
+
+# Specify database and brain artifact directories
+./agchatexport --db-dir ~/.gemini/antigravity-cli/conversations --brain-dir ~/.gemini/antigravity-cli/brain
+
+# Change listening port
+./agchatexport --port 8080
+```
+
+Once running, access the viewer at `http://localhost:7396` in your browser.
+
+## Development & Build
 
 ### Prerequisites
 
-- [uv](https://github.com/astral-sh/uv) (recommended for Python dependency management)
-- Node.js & npm (for frontend development/building)
+- Go 1.22+
+- Node.js 20+ (only for frontend development)
+- protoc (only if modifying the protocol)
 
-### Installation
+### Build Steps
 
-1. Clone the repository and install Python dependencies:
-   ```bash
-   uv sync
-   ```
-
-2. (Optional) Install frontend dependencies if you plan to modify the UI:
+1. **Build Frontend**:
    ```bash
    cd frontend
    npm install
-   ```
-
-## Running the Application
-
-### Production Mode (Simplest)
-
-If you just want to use the app, ensure the frontend is built, then run the backend:
-
-1. Build the frontend (if not already built):
-   ```bash
-   cd frontend
    npm run build
    cd ..
    ```
 
-2. Start the server:
+2. **Compile Go Server**:
    ```bash
-   python main.py
-   ```
-   Visit `http://localhost:7396` in your browser.
-
-### Development Mode
-
-For active development, run both the backend and frontend separately for hot-reloading:
-
-1. Start the Backend API:
-   ```bash
-   python main.py
+   go build -o agchatexport main.go
    ```
 
-2. Start the Frontend Dev Server:
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-   Visit `http://localhost:3000`.
+### Check Build Info
 
-## Packaging
-
-To create a static export of the frontend that the Python backend can serve:
 ```bash
-cd frontend
-npm run build
+./agchatexport -version
 ```
-This generates the `frontend/out` directory, which `main.py` automatically detects and serves.
 
-## Configuration
+## Project Structure
 
-`main.py` supports several CLI arguments:
+- `main.go`: Core service logic, including embedded static asset handling and API routing.
+- `pb/`: Automatically generated Go Protobuf code.
+- `proto/`: Protobuf definitions for Antigravity chat steps.
+- `frontend/`: Source code for the Next.js-based frontend.
+- `.github/workflows/`: CI/CD pipelines for automated builds and releases.
 
-- `--db-dir`: Directory where your `.db` conversation files are located (Default: `~/.gemini/antigravity-cli/conversations`).
-- `--brain-dir`: Directory for brain artifacts (Default: `~/.gemini/antigravity-cli/brain`).
-- `--port`: Port to run the server on (Default: `7396`).
-- `--host`: Host to bind the server to (Default: `localhost`).
+## License
 
-Example:
-```bash
-python main.py --db-dir ./my_logs --port 8080
-```
+GPLv3
